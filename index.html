@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gerenciador P Clientes</title>
+<meta name="theme-color" content="#4caf50">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="GPC">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+:root {
+  --bg:#0f0f0f; --surface:#1a1a1a; --surface2:#222; --border:#2a2a2a;
+  --green:#4caf50; --green-dark:#388e3c; --green-light:#81c784;
+  --text:#f0f0f0; --text2:#888; --danger:#e53935; --warn:#fb8c00;
+  --blue:#1e88e5; --purple:#7b1fa2; --teal:#00897b;
+  --radius:14px;
+}
+body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; min-height:100vh; max-width:480px; margin:0 auto; }
+
+/* LOADING */
+#loading-screen { position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999; }
+.spinner { width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite;margin-bottom:14px; }
+@keyframes spin { to{transform:rotate(360deg);} }
+
+/* AUTH */
+#auth-screen { display:none;flex-direction:column;min-height:100vh; }
+.auth-img { width:100%;display:block;object-fit:cover; }
+.auth-body { padding:24px 20px;flex:1; }
+.auth-tabs { display:flex;background:var(--surface);border-radius:12px;padding:4px;margin-bottom:24px; }
+.auth-tab { flex:1;padding:10px;text-align:center;cursor:pointer;font-size:14px;background:transparent;color:var(--text2);border:none;border-radius:9px;transition:all .2s;font-weight:600; }
+.auth-tab.active { background:var(--green);color:#fff; }
+.form-group { margin-bottom:14px; }
+.form-group label { display:block;font-size:11px;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.6px;font-weight:600; }
+.form-group input { width:100%;padding:13px 16px;background:var(--surface);border:1.5px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;outline:none;transition:border .2s; }
+.form-group input:focus { border-color:var(--green); }
+.btn-primary { width:100%;padding:14px;background:var(--green);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;transition:background .2s;letter-spacing:.5px;margin-top:4px; }
+.btn-primary:hover { background:var(--green-dark); }
+.btn-primary:disabled { opacity:.6;cursor:not-allowed; }
+.auth-error { color:var(--danger);font-size:13px;margin-top:10px;text-align:center; }
+.auth-success { color:var(--green);font-size:13px;margin-top:10px;text-align:center; }
+
+/* APP */
+#app { display:none;flex-direction:column;min-height:100vh; }
+.app-header { overflow:hidden;position:sticky;top:0;z-index:100; }
+.app-header img { width:100%;height:70px;object-fit:cover;object-position:left center;display:block; }
+.app-header-bar { background:var(--green);padding:10px 16px; }
+.app-header-bar h1 { font-size:17px;font-weight:700;color:#fff; }
+
+/* BOTTOM NAV */
+.bottom-nav { background:var(--surface);border-top:1px solid var(--border);display:flex;position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;z-index:100; }
+.nav-btn { flex:1;padding:10px 4px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:10px;display:flex;flex-direction:column;align-items:center;gap:3px;transition:color .2s;font-weight:500; }
+.nav-btn svg { width:22px;height:22px; }
+.nav-btn.active { color:var(--green); }
+.app-content { flex:1;padding:14px;padding-bottom:80px;overflow-y:auto; }
+
+/* SEARCH */
+.search-bar { display:flex;align-items:center;background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:10px 14px;margin-bottom:14px;gap:10px; }
+.search-bar svg { width:18px;height:18px;color:var(--text2);flex-shrink:0; }
+.search-bar input { flex:1;background:transparent;border:none;color:var(--text);font-size:14px;outline:none; }
+
+/* CLIENT CARD */
+.client-card { background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px; }
+.client-top { display:flex;align-items:flex-start;gap:12px;margin-bottom:12px; }
+.client-avatar { width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;font-weight:700;color:#fff;text-transform:uppercase; }
+.client-info { flex:1; }
+.client-name { font-size:16px;font-weight:700;margin-bottom:2px; }
+.client-due { font-size:13px;font-weight:600;margin-bottom:2px; }
+.client-due.ok { color:var(--green); }
+.client-due.warn { color:var(--warn); }
+.client-due.expired { color:var(--danger); }
+.client-value { font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px; }
+.client-plan-tag { display:inline-block;background:var(--surface2);border-radius:6px;padding:2px 8px;font-size:12px;color:var(--text2);font-weight:500; }
+.client-phone { font-size:12px;color:var(--text2);margin-top:3px; }
+.client-actions { display:flex;gap:7px;flex-wrap:wrap; }
+.btn-action { padding:8px 13px;border-radius:10px;border:none;cursor:pointer;font-size:12px;font-weight:600;display:flex;align-items:center;gap:5px;transition:opacity .15s;white-space:nowrap; }
+.btn-action:hover { opacity:.85; }
+.btn-action svg { width:14px;height:14px; }
+.btn-renew { background:var(--surface2);color:var(--green);border:1.5px solid var(--border); }
+.btn-edit { background:var(--surface2);color:var(--text);border:1.5px solid var(--border); }
+.btn-delete { background:var(--surface2);color:var(--danger);border:1.5px solid var(--border); }
+.btn-whats { background:var(--surface2);color:#25D366;border:1.5px solid var(--border); }
+.btn-welcome { background:var(--surface2);color:var(--purple);border:1.5px solid var(--border); }
+
+/* FAB */
+.fab { position:fixed;bottom:74px;right:calc(50% - 230px);width:52px;height:52px;background:var(--green);border:none;border-radius:50%;color:#fff;font-size:26px;cursor:pointer;box-shadow:0 4px 18px rgba(76,175,80,.45);display:flex;align-items:center;justify-content:center;z-index:200;transition:transform .2s; }
+@media(max-width:480px){.fab{right:16px;}}
+.fab:hover { transform:scale(1.08); }
+
+/* MODAL */
+.modal-overlay { position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:500;display:none;align-items:flex-end;justify-content:center;padding:0; }
+.modal-overlay.open { display:flex; }
+.modal { background:var(--surface);border-radius:20px 20px 0 0;padding:24px 20px 32px;width:100%;max-width:480px;max-height:92vh;overflow-y:auto; }
+.modal-handle { width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 20px; }
+.modal-header { display:flex;align-items:center;justify-content:space-between;margin-bottom:20px; }
+.modal-title { font-size:17px;font-weight:700; }
+.modal-close { background:var(--surface2);border:none;color:var(--text2);width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center; }
+.modal-actions { display:flex;gap:10px;margin-top:20px; }
+.btn-outline { flex:1;padding:13px;border:1.5px solid var(--border);background:transparent;color:var(--text);border-radius:12px;font-size:14px;font-weight:600;cursor:pointer; }
+.btn-full { flex:1; }
+
+/* PROFILE */
+.profile-avatar-big { width:72px;height:72px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:#fff;margin:0 auto 10px; }
+.stat-grid { display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px; }
+.stat-card { background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px; }
+.stat-label { font-size:12px;color:var(--text2);margin-bottom:4px; }
+.stat-value { font-size:26px;font-weight:700; }
+.plan-list { background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:16px; }
+.plan-row { display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid var(--border); }
+.plan-row:last-child { border-bottom:none; }
+.plan-dot { width:9px;height:9px;border-radius:50%;margin-right:10px;flex-shrink:0; }
+.plan-name { font-size:14px;font-weight:500;flex:1; }
+.plan-count { font-size:15px;font-weight:700;color:var(--text2); }
+.section-label { font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.7px;font-weight:600;margin-bottom:8px; }
+.config-list { background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:16px; }
+.config-row { display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer; }
+.config-row:last-child { border-bottom:none; }
+.config-icon { width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0; }
+.config-text { flex:1;font-size:14px;font-weight:500; }
+.config-arrow { color:var(--text2);font-size:18px; }
+.btn-logout { width:100%;padding:13px;background:rgba(229,57,53,.12);color:var(--danger);border:1.5px solid rgba(229,57,53,.25);border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;margin-top:4px; }
+
+/* MESSAGES */
+.msg-card { background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px; }
+.msg-label { font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;font-weight:600; }
+.msg-textarea { width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;padding:10px 12px;min-height:90px;resize:vertical;outline:none;font-family:inherit;transition:border .2s;line-height:1.5; }
+.msg-textarea:focus { border-color:var(--green); }
+.msg-vars { font-size:11px;color:var(--text2);margin-top:6px;line-height:1.7; }
+.msg-vars code { background:var(--surface2);padding:1px 6px;border-radius:4px;color:var(--green-light);font-size:11px; }
+.btn-save-msg { margin-top:10px;padding:9px 18px;background:var(--green);color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer; }
+
+/* MISC */
+.section-badge { display:inline-block;background:var(--surface);border:1.5px solid var(--border);border-radius:20px;padding:4px 12px;font-size:12px;color:var(--text2);margin-bottom:12px;font-weight:500; }
+.section-badge span { color:var(--green);font-weight:700; }
+.empty-state { text-align:center;padding:48px 24px;color:var(--text2); }
+.empty-icon { font-size:44px;margin-bottom:12px; }
+.toast { position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;font-weight:500; }
+.toast.show { opacity:1; }
+.confirm-msg { font-size:14px;color:var(--text2);margin-bottom:20px;line-height:1.5; }
+
+/* AVATAR COLORS */
+.av0{background:#e53935;} .av1{background:#8e24aa;} .av2{background:#1e88e5;}
+.av3{background:#00897b;} .av4{background:#fb8c00;} .av5{background:#43a047;}
+.av6{background:#d81b60;} .av7{background:#3949ab;}
+
+  /* TEMPLATES */
+  .tpl-card { background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px; }
+  .tpl-body { flex:1; }
+  .tpl-name { font-size:15px;font-weight:700;margin-bottom:4px; }
+  .tpl-preview { font-size:13px;color:var(--text2);white-space:pre-wrap;line-height:1.4; }
+  .tpl-actions { display:flex;gap:8px;flex-shrink:0; }
+  .tpl-btn { width:36px;height:36px;border-radius:10px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center; }
+  .tpl-btn svg { width:16px;height:16px; }
+  .tpl-btn-edit { background:#fb8c00;color:#fff; }
+  .tpl-btn-del { background:#e53935;color:#fff; }
+  .tpl-btn-send { background:#25D366;color:#fff; }
+</style>
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="spinner"></div>
+  <div style="color:var(--text2);font-size:13px">Carregando...</div>
+</div>
+
+<div id="auth-screen">
+  <img class="auth-img" src="https://yihjuifjhuhdpevrrpwi.supabase.co/storage/v1/object/public/imagens/ChatGPT%20Image%2020%20de%20jun.%20de%202026,%2015_13_31.png" alt="Gerenciador P Clientes">
+  <div class="auth-body">
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchAuthTab('login')">Entrar</button>
+      <button class="auth-tab" onclick="switchAuthTab('register')">Cadastrar-se</button>
+    </div>
+    <div id="tab-login">
+      <div class="form-group"><label>Usuário</label><input type="text" id="login-user" placeholder="Nome de usuário"></div>
+      <div class="form-group"><label>Senha</label><input type="password" id="login-pass" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+      <button class="btn-primary" id="btn-login" onclick="doLogin()">ENTRAR</button>
+      <div id="login-error" class="auth-error"></div>
+    </div>
+    <div id="tab-register" style="display:none">
+      <div class="form-group"><label>Nome completo</label><input type="text" id="reg-name" placeholder="Seu nome"></div>
+      <div class="form-group"><label>Usuário</label><input type="text" id="reg-user" placeholder="Escolha um usuário"></div>
+      <div class="form-group"><label>Senha</label><input type="password" id="reg-pass" placeholder="Mínimo 4 caracteres"></div>
+      <div class="form-group"><label>Confirmar senha</label><input type="password" id="reg-pass2" placeholder="Repita a senha"></div>
+      <button class="btn-primary" id="btn-register" onclick="doRegister()">CADASTRAR-SE</button>
+      <div id="reg-error" class="auth-error"></div>
+      <div id="reg-ok" class="auth-success"></div>
+    </div>
+  </div>
+</div>
+
+<div id="app">
+  <div class="app-header" style="display:flex;align-items:center;background:#111;padding:0;height:64px;overflow:hidden">
+    <img src="https://yihjuifjhuhdpevrrpwi.supabase.co/storage/v1/object/public/imagens/ChatGPT%20Image%2020%20de%20jun.%20de%202026,%2015_13_31.png" alt="" style="height:64px;width:64px;object-fit:cover;object-position:2% center;flex-shrink:0">
+    <div style="flex:1;padding:0 14px">
+      <div style="font-size:11px;color:#4caf50;font-weight:700;letter-spacing:.5px;text-transform:uppercase">Gerenciador P Clientes</div>
+      <h1 id="page-title" style="color:#fff;font-size:17px;font-weight:700;margin-top:1px">Início</h1>
+    </div>
+  </div>
+  <div class="app-content" id="app-content"></div>
+  <button class="fab" id="fab-btn" onclick="openAddClient()">+</button>
+  <nav class="bottom-nav">
+    <button class="nav-btn active" id="nav-home" onclick="showTab('home')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>Início
+    </button>
+    <button class="nav-btn" id="nav-expired" onclick="showTab('expired')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>Vencidos
+    </button>
+    <button class="nav-btn" id="nav-add" onclick="openAddClient()">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>Cadastrar
+    </button>
+    <button class="nav-btn" id="nav-templates" onclick="showTab('templates')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg>Templates
+    </button>
+    <button class="nav-btn" id="nav-profile" onclick="showTab('profile')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>Perfil
+    </button>
+  </nav>
+</div>
+
+<!-- MODAL CLIENTE -->
+<div class="modal-overlay" id="modal-client">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <span class="modal-title" id="modal-client-title">Novo Cliente</span>
+      <button class="modal-close" onclick="closeModal('modal-client')">✕</button>
+    </div>
+    <input type="hidden" id="client-id">
+    <div class="form-group"><label>Nome completo *</label><input type="text" id="c-name" placeholder="Nome do cliente"></div>
+    <div class="form-group"><label>WhatsApp (com DDD)</label><input type="tel" id="c-phone" placeholder="Ex: 53999990000"></div>
+    <div class="form-group"><label>Plano / Serviço</label><input type="text" id="c-plan" placeholder="Ex: Mensal"></div>
+    <div class="form-group"><label>Valor (R$)</label><input type="number" id="c-value" placeholder="25.00" step="0.01" min="0"></div>
+    <div class="form-group"><label>Data de vencimento *</label><input type="date" id="c-due"></div>
+    <div class="form-group"><label>Observações</label><input type="text" id="c-obs" placeholder="Notas extras..."></div>
+    <div class="modal-actions">
+      <button class="btn-outline" onclick="closeModal('modal-client')">Cancelar</button>
+      <button class="btn-primary btn-full" onclick="saveClient()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EXCLUIR -->
+<div class="modal-overlay" id="modal-confirm">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <span class="modal-title">Excluir Cliente</span>
+      <button class="modal-close" onclick="closeModal('modal-confirm')">✕</button>
+    </div>
+    <p class="confirm-msg" id="confirm-msg"></p>
+    <div class="modal-actions">
+      <button class="btn-outline" onclick="closeModal('modal-confirm')">Cancelar</button>
+      <button class="btn-primary btn-full" style="background:var(--danger)" onclick="confirmDelete()">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL RENOVAR -->
+<div class="modal-overlay" id="modal-renew">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <span class="modal-title">Renovar Cliente</span>
+      <button class="modal-close" onclick="closeModal('modal-renew')">✕</button>
+    </div>
+    <div class="form-group"><label>Nova data de vencimento</label><input type="date" id="renew-date"></div>
+    <div class="modal-actions">
+      <button class="btn-outline" onclick="closeModal('modal-renew')">Cancelar</button>
+      <button class="btn-primary btn-full" onclick="confirmRenew()">Renovar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL MENSAGENS -->
+<div class="modal-overlay" id="modal-messages">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <span class="modal-title">Mensagens WhatsApp</span>
+      <button class="modal-close" onclick="closeModal('modal-messages')">✕</button>
+    </div>
+    <div class="msg-card">
+      <div class="msg-label">📢 Renovação</div>
+      <textarea class="msg-textarea" id="msg-renewal"></textarea>
+      <div class="msg-vars">Variáveis: <code>{nome}</code> <code>{plano}</code> <code>{dias}</code> <code>{valor}</code> <code>{vencimento}</code></div>
+      <button class="btn-save-msg" onclick="saveMsg('renewal')">Salvar</button>
+    </div>
+    <div class="msg-card">
+      <div class="msg-label">⚠️ Vencido</div>
+      <textarea class="msg-textarea" id="msg-expired"></textarea>
+      <div class="msg-vars">Variáveis: <code>{nome}</code> <code>{plano}</code> <code>{dias}</code> <code>{valor}</code></div>
+      <button class="btn-save-msg" onclick="saveMsg('expired')">Salvar</button>
+    </div>
+    <div class="msg-card">
+      <div class="msg-label">🎉 Boas-vindas</div>
+      <textarea class="msg-textarea" id="msg-welcome"></textarea>
+      <div class="msg-vars">Variáveis: <code>{nome}</code> <code>{plano}</code> <code>{vencimento}</code></div>
+      <button class="btn-save-msg" onclick="saveMsg('welcome')">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const SUPA_URL='https://yihjuifjhuhdpevrrpwi.supabase.co';
+const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpaGp1aWZqaHVoZHBldnJycHdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4MDUyMDgsImV4cCI6MjA5NzM4MTIwOH0.ibD7PT4z68WcRApjG3MZEtNIPi0Aw8EShLOt7CmqmSU';
+const sb=supabase.createClient(SUPA_URL,SUPA_KEY);
+
+let currentUser=null,clients=[],messages={},currentTab='home',searchQuery='',deleteTargetId=null,renewTargetId=null;
+
+const AVATAR_COLORS=['av0','av1','av2','av3','av4','av5','av6','av7'];
+function avatarClass(name){ let h=0;for(let c of(name||''))h=(h*31+c.charCodeAt(0))%AVATAR_COLORS.length;return AVATAR_COLORS[h];}
+
+function getDefaultMessages(){
+  return{
+    renewal:'Ol\u00e1 {nome}! \ud83d\ude0a\nSeu plano *{plano}* vence em {dias} dias.\nValor: R$ {valor}\nPara renovar, entre em contato. Obrigado!',
+    expired:'Ol\u00e1 {nome}! \u26a0\ufe0f\nSeu plano *{plano}* venceu h\u00e1 {dias} dias.\nValor: R$ {valor}\nPor favor, entre em contato para regularizar. Obrigado!',
+    welcome:'Ol\u00e1 {nome}! \ud83c\udf89\nBem-vindo(a)! Seu plano *{plano}* est\u00e1 ativo at\u00e9 {vencimento}.\nQualquer d\u00favida, estamos \u00e0 disposi\u00e7\u00e3o!'
+  };
+}
+
+window.addEventListener('load',()=>{setTimeout(()=>{document.getElementById('loading-screen').style.display='none';document.getElementById('auth-screen').style.display='flex';},600);});
+
+function switchAuthTab(tab){
+  document.getElementById('tab-login').style.display=tab==='login'?'block':'none';
+  document.getElementById('tab-register').style.display=tab==='register'?'block':'none';
+  document.querySelectorAll('.auth-tab').forEach((t,i)=>t.classList.toggle('active',(i===0&&tab==='login')||(i===1&&tab==='register')));
+}
+
+async function doLogin(){
+  const username=document.getElementById('login-user').value.trim();
+  const pass=document.getElementById('login-pass').value;
+  const err=document.getElementById('login-error');
+  const btn=document.getElementById('btn-login');
+  if(!username||!pass){err.textContent='Preencha todos os campos.';return;}
+  btn.disabled=true;btn.textContent='Entrando...';
+  try{
+    const{data,error}=await sb.from('users').select('*').eq('username',username.toLowerCase()).single();
+    if(error||!data){err.textContent='Usuário não encontrado.';return;}
+    if(data.password!==btoa(pass)){err.textContent='Senha incorreta.';return;}
+    currentUser=data;
+    await loadUserData();
+    document.getElementById('auth-screen').style.display='none';
+    document.getElementById('app').style.display='flex';
+    showTab('home');
+  }catch(e){err.textContent='Erro de conexão.';}
+  finally{btn.disabled=false;btn.textContent='ENTRAR';}
+}
+
+async function doRegister(){
+  const name=document.getElementById('reg-name').value.trim();
+  const username=document.getElementById('reg-user').value.trim().toLowerCase();
+  const pass=document.getElementById('reg-pass').value;
+  const pass2=document.getElementById('reg-pass2').value;
+  const err=document.getElementById('reg-error');
+  const ok=document.getElementById('reg-ok');
+  const btn=document.getElementById('btn-register');
+  err.textContent='';ok.textContent='';
+  if(!name||!username||!pass){err.textContent='Preencha todos os campos.';return;}
+  if(pass.length<4){err.textContent='Senha deve ter ao menos 4 caracteres.';return;}
+  if(pass!==pass2){err.textContent='As senhas não coincidem.';return;}
+  btn.disabled=true;btn.textContent='Cadastrando...';
+  try{
+    const{data:exists}=await sb.from('users').select('id').eq('username',username).single();
+    if(exists){err.textContent='Este usuário já existe.';return;}
+    const{error}=await sb.from('users').insert({name,username,password:btoa(pass)});
+    if(error)throw error;
+    ok.textContent='Cadastro realizado! Faça login.';
+    setTimeout(()=>switchAuthTab('login'),1500);
+  }catch(e){err.textContent='Erro ao cadastrar.';}
+  finally{btn.disabled=false;btn.textContent='CADASTRAR-SE';}
+}
+
+async function loadUserData(){
+  const{data:c}=await sb.from('clients').select('*').eq('user_username',currentUser.username);
+  clients=c||[];
+  const{data:m}=await sb.from('messages').select('*').eq('user_username',currentUser.username).single();
+  messages=m?{renewal:m.renewal,expired:m.expired,welcome:m.welcome}:getDefaultMessages();
+}
+
+function showTab(tab){
+  currentTab=tab;
+  const titles={home:'Início',expired:'Vencidos',templates:'Templates',profile:'Perfil'};
+  document.getElementById('page-title').textContent=titles[tab]||'Início';
+  ['home','expired','templates','profile'].forEach(t=>document.getElementById('nav-'+t)&&document.getElementById('nav-'+t).classList.toggle('active',t===tab));
+  document.getElementById('fab-btn').style.display=(tab==='home'||tab==='expired')?'flex':'none';
+  if(tab==='templates'){loadTemplates();renderTemplatesTab();return;}
+  renderContent();
+}
+
+function daysUntil(d){const due=new Date(d+'T00:00:00');const now=new Date();now.setHours(0,0,0,0);return Math.round((due-now)/86400000);}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function toast(msg,color='#2a2a2a'){const t=document.getElementById('toast');t.textContent=msg;t.style.background=color;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+
+function dueLabel(days){
+  if(days===0)return{cls:'warn',text:'vence hoje'};
+  if(days<0)return{cls:'expired',text:`venceu há ${Math.abs(days)} dias`};
+  if(days<=7)return{cls:'warn',text:`vence em ${days} dia${days!==1?'s':''}`};
+  return{cls:'ok',text:`vence em ${days} dias`};
+}
+
+function clientCard(c){
+  const days=daysUntil(c.due);
+  const dl=dueLabel(days);
+  const val=parseFloat(c.value||0).toFixed(2).replace('.',',');
+  const phone=(c.phone||'').replace(/\D/g,'');
+  const av=avatarClass(c.name);
+  const initials=(c.name||'?').split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+  return `<div class="client-card">
+    <div class="client-top">
+      <div class="client-avatar ${av}">${initials}</div>
+      <div class="client-info">
+        <div class="client-name">${esc(c.name)}</div>
+        <div class="client-due ${dl.cls}">${dl.text}</div>
+        <div class="client-value">R$ ${val}</div>
+        ${c.plan?`<span class="client-plan-tag">${esc(c.plan)}</span>`:''}
+        ${c.phone?`<div class="client-phone">${esc(c.phone)}</div>`:''}
+      </div>
+    </div>
+    <div class="client-actions">
+      <button class="btn-action btn-renew" onclick="openRenew('${c.id}')">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.96 7.96 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+        Renovar
+      </button>
+      <button class="btn-action btn-edit" onclick="openEditClient('${c.id}')">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+        Editar
+      </button>
+      <button class="btn-action btn-delete" onclick="openDelete('${c.id}')">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+        Excluir
+      </button>
+      ${phone?`<button class="btn-action btn-whats" onclick="sendWhats('${c.id}')">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.114.553 4.1 1.523 5.823L.057 23.428a.5.5 0 00.609.61l5.652-1.455A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.933 0-3.742-.524-5.29-1.437l-.38-.224-3.934 1.013 1.036-3.83-.247-.393A9.956 9.956 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+      </button>`:''}
+      ${phone?`<button class="btn-action btn-welcome" onclick="sendWelcome('${c.id}')">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg>
+      </button>`:''}
+    </div>
+  </div>`;
+}
+
+function filterList(){
+  var expired=currentTab==='expired';
+  var list=clients.filter(function(c){return expired?daysUntil(c.due)<0:daysUntil(c.due)>=0;})
+    .filter(function(c){return c.name.toLowerCase().indexOf(searchQuery.toLowerCase())>=0;});
+  list.sort(function(a,b){return daysUntil(a.due)-daysUntil(b.due);});
+  var cl=document.getElementById('client-list');
+  var badge=document.querySelector('.section-badge span');
+  if(cl){
+    if(list.length){
+      var h='';
+      for(var i=0;i<list.length;i++){h+=clientCard(list[i]);}
+      cl.innerHTML=h;
+    } else {
+      cl.innerHTML='<div class="empty-state"><div class="empty-icon">'+(expired?'✅':'👥')+'</div><p>'+(expired?'Nenhum cliente vencido.':'Nenhum cliente ativo.<br>Toque em + para adicionar.')+'</p></div>';
+    }
+  }
+  if(badge)badge.textContent=list.length;
+}
+function renderContent(){
+  const el=document.getElementById('app-content');
+  if(currentTab==='home'){
+    const list=clients.filter(c=>daysUntil(c.due)>=0).filter(c=>c.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    list.sort((a,b)=>daysUntil(a.due)-daysUntil(b.due));
+    el.innerHTML=`<div class="search-bar"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg><input type="text" placeholder="Pesquisar..." value="${esc(searchQuery)}" id="search-input"></div>
+    <div class="section-badge">Ativos: <span>${list.length}</span></div>
+    <div id='client-list'>${list.length?list.map(clientCard).join(''):'<div class="empty-state"><div class="empty-icon">👥</div><p>Nenhum cliente ativo.<br>Toque em + para adicionar.</p></div>'}</div>`;
+  setTimeout(function(){var si=document.getElementById('search-input');if(si){si.focus=si.focus;si.addEventListener('input',function(e){searchQuery=e.target.value;filterList();});}},0);
+  } else if(currentTab==='expired'){
+    const list=clients.filter(c=>daysUntil(c.due)<0).filter(c=>c.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    list.sort((a,b)=>daysUntil(a.due)-daysUntil(b.due));
+    el.innerHTML=`<div class="search-bar"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg><input type="text" placeholder="Pesquisar vencidos..." value="${esc(searchQuery)}" id="search-input"></div>
+    <div class="section-badge">Vencidos: <span>${list.length}</span></div>
+    <div id='client-list'>${list.length?list.map(clientCard).join(''):'<div class="empty-state"><div class="empty-icon">✅</div><p>Nenhum cliente vencido.</p></div>'}</div>`;
+  setTimeout(function(){var si=document.getElementById('search-input');if(si){si.addEventListener('input',function(e){searchQuery=e.target.value;filterList();});}},0);
+  } else if(currentTab==='profile'){
+    const ativos=clients.filter(c=>daysUntil(c.due)>=0).length;
+    const vencidos=clients.filter(c=>daysUntil(c.due)<0).length;
+    const mensal=clients.filter(c=>(c.plan||'').toLowerCase().includes('mensal')).length;
+    const trimestral=clients.filter(c=>(c.plan||'').toLowerCase().includes('trimestral')).length;
+    const semestral=clients.filter(c=>(c.plan||'').toLowerCase().includes('semestral')).length;
+    const anual=clients.filter(c=>(c.plan||'').toLowerCase().includes('anual')).length;
+    const initials=(currentUser.name||'?').split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+    el.innerHTML=`
+    <div style="text-align:center;margin-bottom:20px">
+      <div class="profile-avatar-big">${initials}</div>
+      <div style="font-size:18px;font-weight:700">${esc(currentUser.name)}</div>
+      <div style="color:var(--text2);font-size:13px">@${esc(currentUser.username)}</div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">Clientes ativos</div><div class="stat-value" style="color:var(--green)">${ativos}</div></div>
+      <div class="stat-card"><div class="stat-label">Clientes vencidos</div><div class="stat-value" style="color:var(--danger)">${vencidos}</div></div>
+    </div>
+    <div class="section-label">Clientes ativos por plano</div>
+    <div class="plan-list">
+      <div class="plan-row"><span class="plan-dot" style="background:#4caf50"></span><span class="plan-name">Mensais</span><span class="plan-count">${mensal}</span></div>
+      <div class="plan-row"><span class="plan-dot" style="background:#1e88e5"></span><span class="plan-name">Trimestrais</span><span class="plan-count">${trimestral}</span></div>
+      <div class="plan-row"><span class="plan-dot" style="background:#fb8c00"></span><span class="plan-name">Semestrais</span><span class="plan-count">${semestral}</span></div>
+      <div class="plan-row"><span class="plan-dot" style="background:#7b1fa2"></span><span class="plan-name">Anuais</span><span class="plan-count">${anual}</span></div>
+    </div>
+    <div class="section-label">Configurações</div>
+    <div class="config-list">
+      <div class="config-row" onclick="openMessagesModal()">
+        <div class="config-icon" style="background:rgba(37,211,102,.12)">💬</div>
+        <span class="config-text">Editar mensagem do WhatsApp</span>
+        <span class="config-arrow">›</span>
+      </div>
+      <div class="config-row" onclick="doLogout()">
+        <div class="config-icon" style="background:rgba(229,57,53,.12)">🚪</div>
+        <span class="config-text" style="color:var(--danger)">Sair</span>
+        <span class="config-arrow">›</span>
+      </div>
+    </div>`;
+  }
+}
+
+function openMessagesModal(){
+  document.getElementById('msg-renewal').value=messages.renewal||'';
+  document.getElementById('msg-expired').value=messages.expired||'';
+  document.getElementById('msg-welcome').value=messages.welcome||'';
+  openModal('modal-messages');
+}
+
+async function saveMsg(key){
+  messages[key]=document.getElementById('msg-'+key).value;
+  const{data:existing}=await sb.from('messages').select('id').eq('user_username',currentUser.username).single();
+  if(existing){await sb.from('messages').update({[key]:messages[key]}).eq('user_username',currentUser.username);}
+  else{await sb.from('messages').insert({user_username:currentUser.username,...messages});}
+  toast('✅ Mensagem salva!','#388e3c');
+}
+
+function openAddClient(){
+  document.getElementById('modal-client-title').textContent='Novo Cliente';
+  document.getElementById('client-id').value='';
+  ['c-name','c-phone','c-plan','c-obs'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('c-value').value='';
+  document.getElementById('c-due').value='';
+  openModal('modal-client');
+}
+function openEditClient(id){
+  const c=clients.find(c=>c.id===id);if(!c)return;
+  document.getElementById('modal-client-title').textContent='Editar Cliente';
+  document.getElementById('client-id').value=c.id;
+  document.getElementById('c-name').value=c.name||'';
+  document.getElementById('c-phone').value=c.phone||'';
+  document.getElementById('c-plan').value=c.plan||'';
+  document.getElementById('c-value').value=c.value||'';
+  document.getElementById('c-due').value=c.due||'';
+  document.getElementById('c-obs').value=c.obs||'';
+  openModal('modal-client');
+}
+async function saveClient(){
+  const name=document.getElementById('c-name').value.trim();
+  const due=document.getElementById('c-due').value;
+  if(!name){alert('Nome é obrigatório.');return;}
+  if(!due){alert('Data de vencimento é obrigatória.');return;}
+  const id=document.getElementById('client-id').value;
+  const data={name,phone:document.getElementById('c-phone').value.trim(),plan:document.getElementById('c-plan').value.trim(),value:parseFloat(document.getElementById('c-value').value)||0,due,obs:document.getElementById('c-obs').value.trim(),user_username:currentUser.username};
+  try{
+    if(id){
+      const{error}=await sb.from('clients').update(data).eq('id',id);
+      if(error)throw error;
+      const idx=clients.findIndex(c=>c.id===id);
+      if(idx!==-1)clients[idx]={...clients[idx],...data};
+    }else{
+      const{data:ins,error}=await sb.from('clients').insert(data).select().single();
+      if(error)throw error;
+      clients.push(ins);
+    }
+    closeModal('modal-client');toast('✅ Cliente salvo!','#388e3c');renderContent();
+  }catch(e){toast('❌ Erro ao salvar.','#c62828');}
+}
+function openDelete(id){
+  deleteTargetId=id;
+  const c=clients.find(c=>c.id===id);
+  document.getElementById('confirm-msg').textContent=`Deseja realmente excluir "${c?.name}"? Esta ação não pode ser desfeita.`;
+  openModal('modal-confirm');
+}
+async function confirmDelete(){
+  try{
+    await sb.from('clients').delete().eq('id',deleteTargetId);
+    clients=clients.filter(c=>c.id!==deleteTargetId);
+    closeModal('modal-confirm');toast('🗑️ Cliente excluído.','#c62828');renderContent();
+  }catch(e){toast('❌ Erro ao excluir.','#c62828');}
+}
+function openRenew(id){
+  renewTargetId=id;
+  const base=new Date();base.setDate(base.getDate()+30);
+  document.getElementById('renew-date').value=base.toISOString().split('T')[0];
+  openModal('modal-renew');
+}
+async function confirmRenew(){
+  const newDue=document.getElementById('renew-date').value;
+  if(!newDue){alert('Escolha a nova data.');return;}
+  try{
+    await sb.from('clients').update({due:newDue}).eq('id',renewTargetId);
+    const idx=clients.findIndex(c=>c.id===renewTargetId);
+    if(idx!==-1)clients[idx].due=newDue;
+    closeModal('modal-renew');toast('🔄 Cliente renovado!','#388e3c');renderContent();
+  }catch(e){toast('❌ Erro ao renovar.','#c62828');}
+}
+function buildMsg(tmpl,c){
+  const days=daysUntil(c.due);
+  const val=parseFloat(c.value||0).toFixed(2).replace('.',',');
+  const dueF=c.due?c.due.split('-').reverse().join('/'):'';
+  return tmpl.replace(/{nome}/g,c.name).replace(/{plano}/g,c.plan||'Plano').replace(/{dias}/g,Math.abs(days)).replace(/{valor}/g,val).replace(/{vencimento}/g,dueF);
+}
+function sendWhats(id){
+  const c=clients.find(c=>c.id===id);if(!c)return;
+  const days=daysUntil(c.due);
+  const msg=buildMsg(days<0?messages.expired:messages.renewal,c);
+  const phone=(c.phone||'').replace(/\D/g,'');
+  window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(msg)}`,'_blank');
+}
+function sendWelcome(id){
+  const c=clients.find(c=>c.id===id);if(!c)return;
+  const msg=buildMsg(messages.welcome,c);
+  const phone=(c.phone||'').replace(/\D/g,'');
+  window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(msg)}`,'_blank');
+}
+async function doLogout(){
+  currentUser=null;clients=[];messages={};searchQuery='';
+  document.getElementById('app').style.display='none';
+  document.getElementById('auth-screen').style.display='flex';
+  document.getElementById('login-user').value='';
+  document.getElementById('login-pass').value='';
+  document.getElementById('login-error').textContent='';
+}
+
+// ===== TEMPLATES =====
+let templates = [];
+let sendTplId = null;
+
+function loadTemplates(){
+  const key='gpc_tpl_'+(currentUser?currentUser.username:'');
+  templates=JSON.parse(localStorage.getItem(key)||'[]');
+}
+function saveTemplates(){
+  const key='gpc_tpl_'+(currentUser?currentUser.username:'');
+  localStorage.setItem(key,JSON.stringify(templates));
+}
+
+function renderTemplatesTab(){
+  loadTemplates();
+  const el=document.getElementById('app-content');
+  el.innerHTML=`
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+    <div style="font-size:15px;font-weight:700">💬 Templates de mensagem</div>
+    <button onclick="openAddTpl()" style="background:var(--green);color:#fff;border:none;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer">+ Novo</button>
+  </div>
+  <div id="tpl-list">
+    ${templates.length?templates.map(tplCard).join(''):'<div class="empty-state"><div class="empty-icon">💬</div><p>Nenhum template ainda.<br>Clique em + Novo para criar.</p></div>'}
+  </div>`;
+}
+
+function tplCard(t){
+  const preview=(t.body||'').substring(0,60)+(t.body&&t.body.length>60?'...':'');
+  return `<div class="tpl-card">
+    <div class="tpl-body">
+      <div class="tpl-name">${esc(t.name)}</div>
+      <div class="tpl-preview">${esc(preview)}</div>
+    </div>
+    <div class="tpl-actions">
+      <button class="tpl-btn tpl-btn-send" onclick="openSendTpl('${t.id}')" title="Enviar">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.114.553 4.1 1.523 5.823L.057 23.428a.5.5 0 00.609.61l5.652-1.455A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.933 0-3.742-.524-5.29-1.437l-.38-.224-3.934 1.013 1.036-3.83-.247-.393A9.956 9.956 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+      </button>
+      <button class="tpl-btn tpl-btn-edit" onclick="openEditTpl('${t.id}')" title="Editar">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+      </button>
+      <button class="tpl-btn tpl-btn-del" onclick="deleteTpl('${t.id}')" title="Excluir">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+      </button>
+    </div>
+  </div>`;
+}
+
+function openAddTpl(){
+  document.getElementById('modal-tpl-title').textContent='Novo Template';
+  document.getElementById('tpl-id').value='';
+  document.getElementById('tpl-name').value='';
+  document.getElementById('tpl-body').value='';
+  openModal('modal-tpl');
+}
+function openEditTpl(id){
+  const t=templates.find(t=>t.id===id);if(!t)return;
+  document.getElementById('modal-tpl-title').textContent='Editar Template';
+  document.getElementById('tpl-id').value=t.id;
+  document.getElementById('tpl-name').value=t.name;
+  document.getElementById('tpl-body').value=t.body;
+  openModal('modal-tpl');
+}
+function saveTpl(){
+  const name=document.getElementById('tpl-name').value.trim();
+  const body=document.getElementById('tpl-body').value.trim();
+  if(!name){alert('Nome é obrigatório.');return;}
+  if(!body){alert('Mensagem é obrigatória.');return;}
+  const id=document.getElementById('tpl-id').value;
+  if(id){
+    const idx=templates.findIndex(t=>t.id===id);
+    if(idx!==-1)templates[idx]={...templates[idx],name,body};
+  } else {
+    templates.push({id:'t'+Date.now(),name,body});
+  }
+  saveTemplates();
+  closeModal('modal-tpl');
+  renderTemplatesTab();
+  toast('✅ Template salvo!','#388e3c');
+}
+function deleteTpl(id){
+  if(!confirm('Excluir este template?'))return;
+  templates=templates.filter(t=>t.id!==id);
+  saveTemplates();
+  renderTemplatesTab();
+  toast('🗑️ Template excluído.','#c62828');
+}
+function openSendTpl(id){
+  sendTplId=id;
+  document.getElementById('tpl-client-search').value='';
+  renderTplClientList();
+  openModal('modal-tpl-send');
+}
+function renderTplClientList(){
+  const q=(document.getElementById('tpl-client-search').value||'').toLowerCase();
+  const list=clients.filter(c=>c.name.toLowerCase().includes(q)&&(c.phone||'').replace(/\D/g,''));
+  const el=document.getElementById('tpl-client-list');
+  if(!el)return;
+  el.innerHTML=list.length?list.map(c=>{
+    const phone=(c.phone||'').replace(/\D/g,'');
+    return `<div onclick="sendTplToClient('${c.id}')" style="padding:12px 14px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;align-items:center;gap:10px;border-radius:10px;transition:background .15s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+      <div class="client-avatar ${avatarClass(c.name)}" style="width:38px;height:38px;font-size:14px">${(c.name||'?').split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase()}</div>
+      <div><div style="font-size:14px;font-weight:600">${esc(c.name)}</div><div style="font-size:12px;color:var(--text2)">${esc(c.phone||'')}</div></div>
+    </div>`;
+  }).join(''):'<div style="text-align:center;padding:24px;color:var(--text2)">Nenhum cliente com WhatsApp encontrado.</div>';
+}
+function sendTplToClient(clientId){
+  const t=templates.find(t=>t.id===sendTplId);
+  const c=clients.find(c=>c.id===clientId);
+  if(!t||!c)return;
+  const days=daysUntil(c.due);
+  const val=parseFloat(c.value||0).toFixed(2).replace('.',',');
+  const dueF=c.due?c.due.split('-').reverse().join('/'):'';
+  const msg=t.body.replace(/{nome}/g,c.name).replace(/{plano}/g,c.plan||'Plano').replace(/{dias}/g,Math.abs(days)).replace(/{valor}/g,val).replace(/{vencimento}/g,dueF);
+  const phone=(c.phone||'').replace(/\D/g,'');
+  window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(msg)}`,'_blank');
+  closeModal('modal-tpl-send');
+}
+
+function openModal(id){document.getElementById(id).classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModal(m.id);}));
+</script>
+
+<!-- MODAL TEMPLATE -->
+<div class="modal-overlay" id="modal-tpl">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <span class="modal-title" id="modal-tpl-title">Novo Template</span>
+      <button class="modal-close" onclick="closeModal('modal-tpl')">✕</button>
+    </div>
+    <input type="hidden" id="tpl-id">
+    <div class="form-group"><label>Nome do template *</label><input type="text" id="tpl-name" placeholder="Ex: Cobrança mensal"></div>
+    <div class="form-group"><label>Mensagem *</label><textarea class="msg-textarea" id="tpl-body" placeholder="Digite a mensagem...&#10;Use {nome}, {plano}, {valor}, {dias}, {vencimento}"></textarea></div>
+    <div class="msg-vars" style="margin-bottom:8px">Variáveis: <code>{nome}</code> <code>{plano}</code> <code>{valor}</code> <code>{dias}</code> <code>{vencimento}</code></div>
+    <div class="modal-actions">
+      <button class="btn-outline" onclick="closeModal('modal-tpl')">Cancelar</button>
+      <button class="btn-primary btn-full" onclick="saveTpl()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ENVIAR TEMPLATE -->
+<div class="modal-overlay" id="modal-tpl-send">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <span class="modal-title">Enviar Template</span>
+      <button class="modal-close" onclick="closeModal('modal-tpl-send')">✕</button>
+    </div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Selecione o cliente para enviar este template:</p>
+    <div class="search-bar" style="margin-bottom:12px">
+      <svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px;color:var(--text2)"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <input type="text" id="tpl-client-search" placeholder="Buscar cliente..." oninput="renderTplClientList()">
+    </div>
+    <div id="tpl-client-list" style="max-height:300px;overflow-y:auto"></div>
+  </div>
+</div>
+
+</body>
+</html>
