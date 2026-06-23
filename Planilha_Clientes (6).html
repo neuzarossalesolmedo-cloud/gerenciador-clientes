@@ -96,6 +96,15 @@
   td.dias.negative   { color: #ff7070; }
   td.dias.positive   { color: #aaffaa; }
 
+  .btn-edit-row {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: #fb8c00; color: #fff; border: none; border-radius: 4px;
+    padding: 5px 10px; font-size: 11px; font-weight: bold; cursor: pointer;
+    white-space: nowrap; transition: filter .15s;
+  }
+  .btn-edit-row:hover { filter: brightness(1.2); }
+  .btn-edit-row svg { width: 13px; height: 13px; flex-shrink: 0; }
+
   .btn-wa {
     display: inline-flex; align-items: center; gap: 4px;
     background: #128C7E; color: #fff; border: none; border-radius: 4px;
@@ -225,7 +234,7 @@
           <th>ID</th><th>RESPONSÁVEL</th><th>CLIENTE</th>
           <th>DATA PAGAMENTO</th><th>PRAZO DIAS</th>
           <th>DATA VENCIMENTO</th><th>DIAS A VENCER</th>
-          <th>STATUS</th><th>WHATSAPP</th>
+          <th>STATUS</th><th>WHATSAPP</th><th>EDITAR</th>
         </tr>
       </thead>
       <tbody id="table-body"></tbody>
@@ -272,6 +281,23 @@
     <div class="modal-actions">
       <button class="btn btn-cancel" onclick="closeModal('renew')">Cancelar</button>
       <button class="btn btn-renew" onclick="renewCliente()">Renovar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EDITAR -->
+<div class="modal-overlay" id="modal-edit">
+  <div class="modal">
+    <h2>✏️ Editar Cliente</h2>
+    <input type="hidden" id="edit-idx">
+    <div class="form-group"><label>Nome do Cliente *</label><input type="text" id="edit-cli"></div>
+    <div class="form-group"><label>WhatsApp (com DDD)</label><input type="text" id="edit-phone" placeholder="Ex: 53999990000"></div>
+    <div class="form-group"><label>Responsável</label><input type="text" id="edit-resp"></div>
+    <div class="form-group"><label>Data de Pagamento (DD/MM/AAAA)</label><input type="text" id="edit-dt"></div>
+    <div class="form-group"><label>Prazo (dias)</label><input type="number" id="edit-prazo"></div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeModal('edit')">Cancelar</button>
+      <button class="btn btn-renew" onclick="saveEdit()">Salvar</button>
     </div>
   </div>
 </div>
@@ -471,12 +497,15 @@ function renderTable() {
     } else {
       waBtnHtml = `<span style="color:#555;font-size:11px">Sem número</span>`;
     }
+    const realIdx = clientes.indexOf(c);
+    const EDIT_ICON = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>`;
     return `<tr>
       <td>${c.id}</td><td>${c.resp}</td><td>${c.cli}</td>
       <td>${c.dt}</td><td>${c.prazo}</td><td>${venc}</td>
       <td class="dias ${diasCls}">${diasStr}</td>
       <td class="status ${st.cls}">${st.label}</td>
       <td>${waBtnHtml}</td>
+      <td><button class="btn-edit-row" onclick="openEdit(${realIdx})">${EDIT_ICON} Editar</button></td>
     </tr>`;
   }).join('');
 }
@@ -557,6 +586,33 @@ function renewCliente() {
   if (!c){showToast(`ID ${id} não encontrado.`,true);return;}
   if (!parseDate(newDt)){showToast('Data inválida. Use DD/MM/AAAA.',true);return;}
   c.dt=newDt; c.prazo=newPr; closeModal('renew'); renderTable(); showToast(`"${c.cli}" renovado!`);
+}
+
+function openEdit(idx) {
+  const c = clientes[idx];
+  if (!c) return;
+  document.getElementById('edit-idx').value = idx;
+  document.getElementById('edit-cli').value = c.cli || '';
+  document.getElementById('edit-phone').value = c.phone || '';
+  document.getElementById('edit-resp').value = c.resp || '';
+  document.getElementById('edit-dt').value = c.dt || '';
+  document.getElementById('edit-prazo').value = c.prazo || 30;
+  openModal('edit');
+}
+
+function saveEdit() {
+  const idx = parseInt(document.getElementById('edit-idx').value);
+  const cli = document.getElementById('edit-cli').value.trim().toUpperCase();
+  const phone = document.getElementById('edit-phone').value.trim().replace(/\D/g,'');
+  const resp = document.getElementById('edit-resp').value.trim().toUpperCase();
+  const dt = document.getElementById('edit-dt').value.trim();
+  const prazo = parseInt(document.getElementById('edit-prazo').value) || 30;
+  if (!cli) { showToast('Nome é obrigatório.', true); return; }
+  if (dt && !parseDate(dt)) { showToast('Data inválida. Use DD/MM/AAAA.', true); return; }
+  clientes[idx] = { ...clientes[idx], cli, phone, resp, dt: dt || clientes[idx].dt, prazo };
+  closeModal('edit');
+  renderTable();
+  showToast(`✅ Cliente "${cli}" atualizado!`);
 }
 
 function showToast(msg, isError=false) {
